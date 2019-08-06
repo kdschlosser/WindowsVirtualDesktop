@@ -31,11 +31,14 @@ eg.RegisterPlugin(
 )
 
 import wx # NOQA
+import sys # NOQA
+import os # NOQA
 
 pyWinVirtualDesktop = None
-make_ide_happy = dict()
 
-if 'MakeIDEHappy' in make_ide_happy:
+BASE_PATH = os.path.abspath(os.path.dirname(__file__))
+
+if 'MakeIDEHappy' in os.environ:
     import pyWinVirtualDesktop as _pyWinVirtualDesktop
 
     pyWinVirtualDesktop = _pyWinVirtualDesktop
@@ -207,6 +210,9 @@ class WindowsVirtualDesktop(eg.PluginBase):
         self.AddAction(IsAppVisible)
 
     def __start__(self, *args):
+        if BASE_PATH not in sys.path:
+            sys.path.insert(0, BASE_PATH)
+            
         global pyWinVirtualDesktop
 
         import pyWinVirtualDesktop as _pyWinVirtualDesktop
@@ -214,7 +220,8 @@ class WindowsVirtualDesktop(eg.PluginBase):
         pyWinVirtualDesktop = _pyWinVirtualDesktop
 
     def __stop__(self):
-        pass
+        if BASE_PATH not in sys.path:
+            sys.path.remove(BASE_PATH)
 
 
 def h_sizer(*ctrls):
