@@ -212,7 +212,7 @@ class WindowsVirtualDesktop(eg.PluginBase):
     def __start__(self, *args):
         if BASE_PATH not in sys.path:
             sys.path.insert(0, BASE_PATH)
-            
+
         global pyWinVirtualDesktop
 
         import pyWinVirtualDesktop as _pyWinVirtualDesktop
@@ -242,7 +242,7 @@ class NameBase(eg.ActionBase):
         )
 
         name_label = panel.StaticText(Text.name_label)
-        name_ctrl = wx.Choice(self, -1, choices=choices)
+        name_ctrl = wx.Choice(panel, -1, choices=choices)
 
         if desktop_name in choices:
             name_ctrl.SetStringSelection(desktop_name)
@@ -265,7 +265,7 @@ class WindowBase(eg.ActionBase):
         )
 
         name_label = panel.StaticText(Text.name_label)
-        name_ctrl = wx.Choice(self, -1, choices=choices)
+        name_ctrl = wx.Choice(panel, -1, choices=choices)
 
         if desktop_name in choices:
             name_ctrl.SetStringSelection(desktop_name)
@@ -279,7 +279,22 @@ class WindowBase(eg.ActionBase):
             for window in desktop:
                 choices += [window.text]
 
-        window_ctrl = wx.Choice(self, -1, choices=sorted(choices))
+        window_ctrl = wx.Choice(panel, -1, choices=sorted(choices))
+
+        use_window_ctrl = wx.CheckBox(panel, -1, '')
+        use_window_ctrl.SetValue(window_name is None)
+        window_ctrl.Enable(window_name is not None)
+
+        use_window_ctrl_label = panel.StaticText('Use Find Window Action:')
+
+        if window_name is None:
+            window_name = ''
+
+        def on_use_window(evt):
+            window_ctrl.Enable(not use_window_ctrl.GetValue())
+            evt.skip()
+
+        use_window_ctrl.Bind(wx.EVT_CHECKBOX, on_use_window)
 
         if window_name in choices:
             window_ctrl.SetStringSelection(window_name)
@@ -288,11 +303,18 @@ class WindowBase(eg.ActionBase):
 
         panel.sizer.Add(h_sizer(name_label, name_ctrl), 0)
         panel.sizer.Add(h_sizer(window_label, window_ctrl), 0)
+        panel.sizer.Add(h_sizer(use_window_ctrl_label, use_window_ctrl), 0)
+
 
         while panel.Affirmed():
+            if use_window_ctrl_label.GetValue():
+                window_name = None
+            else:
+                window_name = window_ctrl.GetStringSelection()
+
             panel.SetResult(
                 name_ctrl.GetStringSelection(),
-                window_ctrl.GetStringSelection()
+                window_name
             )
 
 
@@ -308,7 +330,21 @@ class JustWindowBase(eg.ActionBase):
             for window in desktop:
                 choices += [window.text]
 
-        window_ctrl = wx.Choice(self, -1, choices=sorted(choices))
+        window_ctrl = wx.Choice(panel, -1, choices=sorted(choices))
+        use_window_ctrl = wx.CheckBox(panel, -1, '')
+        use_window_ctrl.SetValue(window_name is None)
+        window_ctrl.Enable(window_name is not None)
+
+        use_window_ctrl_label = panel.StaticText('Use Find Window Action:')
+
+        if window_name is None:
+            window_name = ''
+
+        def on_use_window(evt):
+            window_ctrl.Enable(not use_window_ctrl.GetValue())
+            evt.skip()
+
+        use_window_ctrl.Bind(wx.EVT_CHECKBOX, on_use_window)
 
         if window_name in choices:
             window_ctrl.SetStringSelection(window_name)
@@ -316,11 +352,14 @@ class JustWindowBase(eg.ActionBase):
             window_ctrl.SetSelection(0)
 
         panel.sizer.Add(h_sizer(window_label, window_ctrl), 0)
+        panel.sizer.Add(h_sizer(use_window_ctrl_label, use_window_ctrl), 0)
 
         while panel.Affirmed():
-            panel.SetResult(
-                window_ctrl.GetStringSelection()
-            )
+            if use_window_ctrl_label.GetValue():
+                window_name = None
+            else:
+                window_name = window_ctrl.GetStringSelection()
+            panel.SetResult(window_name)
 
 
 class GetDesktopNameFromNumber(eg.ActionBase):
@@ -418,16 +457,26 @@ class GetDesktopId(NameBase):
 
 class MoveWindowToDesktop(WindowBase):
 
-    def __call__(self, desktop_name, window_name):
+    def __call__(self, desktop_name, window_name=None):
         found_desktop = None
         found_window = None
+
+        if window_name is None:
+            if eg.lastFoundWindows:
+                window_name = eg.lastFoundWindows[0]
+            else:
+                eg.PrintNotice(
+                    'You need to either select an application name'
+                    'name or use the find window action.'
+                )
+                return
 
         for desktop in pyWinVirtualDesktop:
             if desktop.name == desktop_name:
                 found_desktop = desktop
 
             for window in desktop:
-                if window.text == window_name:
+                if window_name in (window.text, window.id):
                     found_window = window
 
         if found_desktop is None:
@@ -435,7 +484,7 @@ class MoveWindowToDesktop(WindowBase):
             return
 
         if found_window is None:
-            eg.PrintNotice('Window ' + window_name + ' not found.')
+            eg.PrintNotice('Window ' + str(window_name) + ' not found.')
             return
 
         found_desktop.add_window(found_window)
@@ -443,7 +492,17 @@ class MoveWindowToDesktop(WindowBase):
 
 class DesktopHasWindow(WindowBase):
 
-    def __call__(self, desktop_name, window_name):
+    def __call__(self, desktop_name, window_name=None):
+        if window_name is None:
+            if eg.lastFoundWindows:
+                window_name = eg.lastFoundWindows[0]
+            else:
+                eg.PrintNotice(
+                    'You need to either select an application name'
+                    'name or use the find window action.'
+                )
+                return False
+
         for desktop in pyWinVirtualDesktop:
             if desktop.name == desktop_name:
                 break
@@ -452,7 +511,7 @@ class DesktopHasWindow(WindowBase):
             return False
 
         for window in desktop:
-            if window.text == window_name:
+            if window_name in (window.text, window.id):
                 return True
 
         return False
@@ -505,16 +564,26 @@ class GetDesktops(eg.ActionBase):
 
 class IsAppPinned(JustWindowBase):
 
-    def __call__(self, app_name):
+    def __call__(self, app_name=None):
+        if app_name is None:
+            if eg.lastFoundWindows:
+                app_name = eg.lastFoundWindows[0]
+            else:
+                eg.PrintNotice(
+                    'You need to either select an application name'
+                    'name or use the find window action.'
+                )
+                return False
+
         for desktop in pyWinVirtualDesktop:
             for window in desktop:
-                if window.text == app_name:
+                if app_name in (window.text, window.id):
                     break
             else:
                 continue
             break
         else:
-            eg.PrintError('App ' + app_name + ' not found.')
+            eg.PrintError('App ' + str(app_name) + ' not found.')
             return False
 
         return window.view.pinned
@@ -522,35 +591,53 @@ class IsAppPinned(JustWindowBase):
 
 class PinApp(JustWindowBase):
 
-    def __call__(self, app_name):
+    def __call__(self, app_name=None):
+        if app_name is None:
+            if eg.lastFoundWindows:
+                app_name = eg.lastFoundWindows[0]
+            else:
+                eg.PrintNotice(
+                    'You need to either select an application name'
+                    'name or use the find window action.'
+                )
+                return
+
         for desktop in pyWinVirtualDesktop:
             for window in desktop:
-                if window.text == app_name:
+                if app_name in (window.text, window.id):
                     break
             else:
                 continue
             break
         else:
-            eg.PrintError('App ' + app_name + ' not found.')
+            eg.PrintError('App ' + str(app_name) + ' not found.')
             return
 
         window.view.pinned = True
 
 
 class UnPinApp(JustWindowBase):
-    def __call__(self, app_name):
+
+    def __call__(self, app_name=None):
+        if app_name is None:
+            if eg.lastFoundWindows:
+                app_name = eg.lastFoundWindows[0]
+            else:
+                eg.PrintNotice(
+                    'You need to either select an application name'
+                    'name or use the find window action.'
+                )
+                return
 
         for desktop in pyWinVirtualDesktop:
             for window in desktop:
-                if window.text == app_name:
+                if app_name in (window.text, window.id):
                     break
             else:
                 continue
-
             break
-
         else:
-            eg.PrintError('App ' + app_name + ' not found.')
+            eg.PrintError('App ' + str(app_name) + ' not found.')
             return
 
         window.view.pinned = False
@@ -571,16 +658,26 @@ class ShowAppInSwitchers(eg.ActionBase):
 
 class IsAppShownInSwitchers(JustWindowBase):
 
-    def __call__(self, app_name):
+    def __call__(self, app_name=None):
+        if app_name is None:
+            if eg.lastFoundWindows:
+                app_name = eg.lastFoundWindows[0]
+            else:
+                eg.PrintNotice(
+                    'You need to either select an application name'
+                    'name or use the find window action.'
+                )
+                return False
+
         for desktop in pyWinVirtualDesktop:
             for window in desktop:
-                if window.text == app_name:
+                if app_name in (window.text, window.id):
                     break
             else:
                 continue
             break
         else:
-            eg.PrintError('App ' + app_name + ' not found.')
+            eg.PrintError('App ' + str(app_name) + ' not found.')
             return False
 
         return window.view.show_in_switchers
@@ -588,16 +685,26 @@ class IsAppShownInSwitchers(JustWindowBase):
 
 class IsAppInTray(JustWindowBase):
 
-    def __call__(self, app_name):
+    def __call__(self, app_name=None):
+        if app_name is None:
+            if eg.lastFoundWindows:
+                app_name = eg.lastFoundWindows[0]
+            else:
+                eg.PrintNotice(
+                    'You need to either select an application name'
+                    'name or use the find window action.'
+                )
+                return False
+
         for desktop in pyWinVirtualDesktop:
             for window in desktop:
-                if window.text == app_name:
+                if app_name in (window.text, window.id):
                     break
             else:
                 continue
             break
         else:
-            eg.PrintError('App ' + app_name + ' not found.')
+            eg.PrintError('App ' + str(app_name) + ' not found.')
             return False
 
         return window.view.is_tray
@@ -605,16 +712,26 @@ class IsAppInTray(JustWindowBase):
 
 class CanAppReceiveInput(JustWindowBase):
 
-    def __call__(self, app_name):
+    def __call__(self, app_name=None):
+        if app_name is None:
+            if eg.lastFoundWindows:
+                app_name = eg.lastFoundWindows[0]
+            else:
+                eg.PrintNotice(
+                    'You need to either select an application name'
+                    'name or use the find window action.'
+                )
+                return False
+
         for desktop in pyWinVirtualDesktop:
             for window in desktop:
-                if window.text == app_name:
+                if app_name in (window.text, window.id):
                     break
             else:
                 continue
             break
         else:
-            eg.PrintError('App ' + app_name + ' not found.')
+            eg.PrintError('App ' + str(app_name) + ' not found.')
             return False
 
         return window.view.can_receive_input
@@ -622,16 +739,26 @@ class CanAppReceiveInput(JustWindowBase):
 
 class IsAppMirrored(JustWindowBase):
 
-    def __call__(self, app_name):
+    def __call__(self, app_name=None):
+        if app_name is None:
+            if eg.lastFoundWindows:
+                app_name = eg.lastFoundWindows[0]
+            else:
+                eg.PrintNotice(
+                    'You need to either select an application name'
+                    'name or use the find window action.'
+                )
+                return False
+
         for desktop in pyWinVirtualDesktop:
             for window in desktop:
-                if window.text == app_name:
+                if app_name in (window.text, window.id):
                     break
             else:
                 continue
             break
         else:
-            eg.PrintError('App ' + app_name + ' not found.')
+            eg.PrintError('App ' + str(app_name) + ' not found.')
             return False
 
         return window.view.is_mirrored
@@ -639,16 +766,26 @@ class IsAppMirrored(JustWindowBase):
 
 class IsAppSplashScreenPresented(JustWindowBase):
 
-    def __call__(self, app_name):
+    def __call__(self, app_name=None):
+        if app_name is None:
+            if eg.lastFoundWindows:
+                app_name = eg.lastFoundWindows[0]
+            else:
+                eg.PrintNotice(
+                    'You need to either select an application name'
+                    'name or use the find window action.'
+                )
+                return False
+
         for desktop in pyWinVirtualDesktop:
             for window in desktop:
-                if window.text == app_name:
+                if app_name in (window.text, window.id):
                     break
             else:
                 continue
             break
         else:
-            eg.PrintError('App ' + app_name + ' not found.')
+            eg.PrintError('App ' + str(app_name) + ' not found.')
             return False
 
         return window.view.is_splash_screen_presented
@@ -656,16 +793,26 @@ class IsAppSplashScreenPresented(JustWindowBase):
 
 class FlashApp(JustWindowBase):
 
-    def __call__(self, app_name):
+    def __call__(self, app_name=None):
+        if app_name is None:
+            if eg.lastFoundWindows:
+                app_name = eg.lastFoundWindows[0]
+            else:
+                eg.PrintNotice(
+                    'You need to either select an application name'
+                    'name or use the find window action.'
+                )
+                return
+
         for desktop in pyWinVirtualDesktop:
             for window in desktop:
-                if window.text == app_name:
+                if app_name in (window.text, window.id):
                     break
             else:
                 continue
             break
         else:
-            eg.PrintError('App ' + app_name + ' not found.')
+            eg.PrintError('App ' + str(app_name) + ' not found.')
             return
 
         return window.view.flash()
@@ -673,16 +820,26 @@ class FlashApp(JustWindowBase):
 
 class ActivateApp(JustWindowBase):
 
-    def __call__(self, app_name):
+    def __call__(self, app_name=None):
+        if app_name is None:
+            if eg.lastFoundWindows:
+                app_name = eg.lastFoundWindows[0]
+            else:
+                eg.PrintNotice(
+                    'You need to either select an application name'
+                    'name or use the find window action.'
+                )
+                return
+
         for desktop in pyWinVirtualDesktop:
             for window in desktop:
-                if window.text == app_name:
+                if app_name in (window.text, window.id):
                     break
             else:
                 continue
             break
         else:
-            eg.PrintError('App ' + app_name + ' not found.')
+            eg.PrintError('App ' + str(app_name) + ' not found.')
             return
 
         return window.view.activate()
@@ -690,16 +847,26 @@ class ActivateApp(JustWindowBase):
 
 class AppHasFocus(JustWindowBase):
 
-    def __call__(self, app_name):
+    def __call__(self, app_name=None):
+        if app_name is None:
+            if eg.lastFoundWindows:
+                app_name = eg.lastFoundWindows[0]
+            else:
+                eg.PrintNotice(
+                    'You need to either select an application name'
+                    'name or use the find window action.'
+                )
+                return False
+
         for desktop in pyWinVirtualDesktop:
             for window in desktop:
-                if window.text == app_name:
+                if app_name in (window.text, window.id):
                     break
             else:
                 continue
             break
         else:
-            eg.PrintError('App ' + app_name + ' not found.')
+            eg.PrintError('App ' + str(app_name) + ' not found.')
             return False
 
         return window.view.has_focus
@@ -707,16 +874,26 @@ class AppHasFocus(JustWindowBase):
 
 class SetAppFocus(JustWindowBase):
 
-    def __call__(self, app_name):
+    def __call__(self, app_name=None):
+        if app_name is None:
+            if eg.lastFoundWindows:
+                app_name = eg.lastFoundWindows[0]
+            else:
+                eg.PrintNotice(
+                    'You need to either select an application name'
+                    'name or use the find window action.'
+                )
+                return
+
         for desktop in pyWinVirtualDesktop:
             for window in desktop:
-                if window.text == app_name:
+                if app_name in (window.text, window.id):
                     break
             else:
                 continue
             break
         else:
-            eg.PrintError('App ' + app_name + ' not found.')
+            eg.PrintError('App ' + str(app_name) + ' not found.')
             return
 
         return window.view.set_focus()
@@ -724,16 +901,26 @@ class SetAppFocus(JustWindowBase):
 
 class IsAppVisible(JustWindowBase):
 
-    def __call__(self, app_name):
+    def __call__(self, app_name=None):
+        if app_name is None:
+            if eg.lastFoundWindows:
+                app_name = eg.lastFoundWindows[0]
+            else:
+                eg.PrintNotice(
+                    'You need to either select an application name'
+                    'name or use the find window action.'
+                )
+                return False
+
         for desktop in pyWinVirtualDesktop:
             for window in desktop:
-                if window.text == app_name:
+                if app_name in (window.text, window.id):
                     break
             else:
                 continue
             break
         else:
-            eg.PrintError('App ' + app_name + ' not found.')
+            eg.PrintError('App ' + str(app_name) + ' not found.')
             return False
 
         return window.view.is_visible
