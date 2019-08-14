@@ -32,7 +32,7 @@ class Config(object):
             os.path.join(path, 'config.data')
 
         if os.path.exists(path):
-            pyWinVirtualDesktop = __import__(__name__.split('.')[0])
+            pyWinVirtualDesktop = __import__(__name__.rplit('.', 1)[0])
 
             desktop_ids = pyWinVirtualDesktop.desktop_ids
 

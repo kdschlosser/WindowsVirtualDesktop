@@ -219,19 +219,11 @@ class WindowsVirtualDesktop(eg.PluginBase):
 
         pyWinVirtualDesktop = _pyWinVirtualDesktop
 
-        for mod_name, mod in list(sys.modules.items())[:]:
-            if mod_name.endswith('pyWinVirtualDesktop'):
-                sys.modules['pyWinVirtualDesktop'] = mod
-            elif 'pyWinVirtualDesktop' in mod_name:
-                mod_name = 'pyWinVirtualDesktop' + mod_name.split('pyWinVirtualDesktop')[-1]
-                sys.modules[mod_name] = mod
-
     def __stop__(self):
         if BASE_PATH not in sys.path:
             sys.path.remove(BASE_PATH)
 
         for mod_name in list(sys.modules.keys())[:]:
-
             if 'pyWinVirtualDesktop' in mod_name:
                 del sys.modules[mod_name]
 
